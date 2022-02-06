@@ -4,111 +4,112 @@ import App from './App.vue'
 
 const store = createStore({
   state: {
-    canvas: null,
     canvases: {},
     canvasUndoHistories: {},
     canvasRedoHistories: {},
-    undoHistory: [],
-    redoHistory: [],
-    nextState: null,
+    nextStates: {},
     processing: false,
   },
 
   mutations: {
-    initializeCanvas(state, canvas) {
-      state.canvas = canvas
-    },
-
     initCanvas(state, { canvasId, canvas }) {
       state.canvases = { ...state.canvases, ...{ [canvasId]: canvas } }
     },
 
-    initUndoHistories(state, canvasId) {
+    initNextState(state, { canvasId, nextState }) {
+      state.nextStates = { ...state.nextStates, ...{ [canvasId]: nextState } }
+    },
+
+    initUndoHistory(state, canvasId) {
       state.canvasUndoHistories = { ...state.canvasUndoHistories, ...{ [canvasId]: [] } }
     },
 
-    initRedoHistories(state, canvasId) {
+    initRedoHistory(state, canvasId) {
       state.canvasRedoHistories = { ...state.canvasRedoHistories, ...{ [canvasId]: [] } }
     },
 
-    updateNextState(state, value) {
-      state.nextState = value
+    updateProcessing(state, value) {
+      state.processing = value
     },
 
-    updateProcessing(state, boolean) {
-      state.processing = boolean
+    updateNextState(state, { canvasId, value }) {
+      state.nextStates[canvasId] = value
     },
 
-    updateUndoHistory(state, value) {
-      state.undoHistory = value
+    updateUndoHistory(state, { canvasId, value }) {
+      state.canvasUndoHistories[canvasId] = value
     },
 
-    updateRedoHistory(state, value) {
-      state.redoHistory = value
+    updateRedoHistory(state, { canvasId, value }) {
+      state.canvasRedoHistories[canvasId] = value
     },
 
-    addUndoHistory(state, value) {
-      state.undoHistory.push(value)
+    addUndoHistory(state, { canvasId, value }) {
+      state.canvasUndoHistories[canvasId].push(value)
     },
 
-    addRedoHistory(state, value) {
-      state.redoHistory.push(value)
+    addRedoHistory(state, { canvasId, value }) {
+      state.canvasRedoHistories[canvasId].push(value)
     },
   },
 
   actions: {
-    initializeCanvas({ commit }, canvas) {
-      commit('initializeCanvas', canvas)
-    },
-
-    initializeCanvasState({ commit, getters }) {
-      commit('updateNextState', getters.getNextCanvasHistory())
+    initCanvas({ commit, getters }, { canvasId, canvas }) {
+      commit('initCanvas', { canvasId, canvas })
+      commit('initUndoHistory', canvasId)
+      commit('initRedoHistory', canvasId)
+      commit('initNextState', { canvasId, nextState: getters.getNextCanvasHistory(canvasId) })
     },
 
     updateProcessing({ commit }, value) {
       commit('updateProcessing', value)
     },
 
-    undoAction({ state, commit, getters }) {
-      let undoHistoryState = [...state.undoHistory]
+    undoAction({ state, commit, getters }, canvasId) {
+      let undoHistoryState = [...state.canvasUndoHistories[canvasId]]
       let history = undoHistoryState.pop()
 
       if (history) {
-        commit('updateUndoHistory', undoHistoryState)
-        commit('addRedoHistory', getters.getNextCanvasHistory())
-        commit('updateNextState', history)
+        commit('updateUndoHistory', { canvasId, value: undoHistoryState })
+        commit('addRedoHistory', { canvasId, value: getters.getNextCanvasHistory(canvasId) })
+        commit('updateNextState', { canvasId, value: history })
         return history
       }
     },
 
-    redoAction({ state, commit, getters }) {
-      let redoHistoryState = [...state.redoHistory]
+    redoAction({ state, commit, getters }, canvasId) {
+      let redoHistoryState = [...state.canvasRedoHistories[canvasId]]
       let history = redoHistoryState.pop()
 
       if (history) {
-        commit('updateRedoHistory', redoHistoryState)
-        commit('addUndoHistory', getters.getNextCanvasHistory())
-        commit('updateNextState', history)
+        commit('updateRedoHistory', { canvasId, value: redoHistoryState })
+        commit('addUndoHistory', { canvasId, value: getters.getNextCanvasHistory(canvasId) })
+        commit('updateNextState', { canvasId, value: history })
         return history
       }
     },
 
-    saveCanvasState({ state, commit, getters }) {
+    saveCanvasState({ state, commit, getters }, canvasId) {
       if (state.processing) return
 
-      commit('addUndoHistory', state.nextState)
-      commit('updateNextState', getters.getNextCanvasHistory())
-    }
+      let nextState = state.nextStates[canvasId]
+      commit('addUndoHistory', { canvasId, value: nextState })
+      commit('updateNextState', { canvasId, value: getters.getNextCanvasHistory(canvasId) })
+    },
   },
 
   getters: {
-    getNextCanvasHistory: (state) => () => {
-      let canvas = state.canvas
+    getNextCanvasHistory: (state) => (canvasId) => {
+      let canvas = state.canvases[canvasId]
       if (!canvas) return
 
       canvas.includeDefaultValues = false
       return canvas.toJSON()
-    }
+    },
+
+    undoHistoryFor: (state) => (canvasId) => state.canvasUndoHistories[canvasId],
+
+    redoHistoryFor: (state) => (canvasId) => state.canvasRedoHistories[canvasId],
   },
 })
 

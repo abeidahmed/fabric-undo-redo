@@ -1,13 +1,30 @@
 <template>
-  <button type="button" @click="undo">Undo</button>
+  <button type="button" @click="undo" :disabled="isDisabled">Undo</button>
 </template>
 
 <script>
-import { mapState, mapMutations, mapActions } from 'vuex'
+import { mapState, mapMutations, mapActions, mapGetters } from 'vuex'
 
 export default {
+  props: {
+    canvasId: {
+      type: String,
+      required: true,
+    },
+  },
+
   computed: {
-    ...mapState(['canvas']),
+    ...mapState(['canvases']),
+    ...mapGetters(['undoHistoryFor']),
+
+    canvas() {
+      return this.canvases[this.canvasId]
+    },
+
+    isDisabled() {
+      let undoHistory = this.undoHistoryFor(this.canvasId)
+      return !undoHistory || undoHistory.length <= 0
+    },
   },
 
   methods: {
@@ -16,7 +33,7 @@ export default {
 
     async undo() {
       this.updateProcessing(true)
-      let currentState = await this.undoAction()
+      let currentState = await this.undoAction(this.canvasId)
       if (currentState) {
         this.canvas.loadFromJSON(currentState, this.render.bind(this))
       }
