@@ -1,30 +1,31 @@
 <template>
   <div>
-    <button type="button" @click="undo" :disabled="!undoAvailable">Undo</button>
-    <button type="button" @click="redo" :disabled="!redoAvailable">Redo</button>
+    <undo-button></undo-button>
+    <redo-button></redo-button>
     <canvas id="canvas" width="800" height="600"></canvas>
   </div>
 </template>
 
 <script>
-import { mapActions, mapState } from 'vuex'
+import { mapActions, mapState, mapGetters } from 'vuex'
 import { uuid } from './helpers/uuid'
+import UndoButton from './components/UndoButton.vue'
+import RedoButton from './components/RedoButton.vue'
 
 export default {
-  data() {
-    return {}
-  },
+  components: { UndoButton, RedoButton },
 
   mounted() {
     let canvas = new fabric.Canvas('canvas', { backgroundColor: '#f5deb3' })
     this.initializeCanvas(canvas)
+    this.initializeCanvasState()
 
     this.canvas.on('object:added', () => {
-      this.updateCanvasState()
+      this.saveCanvasState()
     })
 
     this.canvas.on('object:modified', () => {
-      this.updateCanvasState()
+      this.saveCanvasState()
     })
 
     this.addRect({ fill: '#f55', top: 10, left: 10 });
@@ -33,19 +34,12 @@ export default {
   },
 
   computed: {
-    ...mapState(['canvas', 'undoAvailable', 'redoAvailable']),
+    ...mapState(['canvas']),
+    ...mapGetters(['getNextCanvasHistory']),
   },
 
   methods: {
-    ...mapActions(['initializeCanvas', 'updateCanvasState', 'redoAction', 'undoAction']),
-
-    undo() {
-      this.undoAction()
-    },
-
-    redo() {
-      this.redoAction()
-    },
+    ...mapActions(['initializeCanvas', 'saveCanvasState', 'initializeCanvasState']),
 
     addRect({ fill, top, left }) {
       this.canvas.add(

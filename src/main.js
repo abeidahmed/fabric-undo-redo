@@ -5,12 +5,13 @@ import App from './App.vue'
 const store = createStore({
   state: {
     canvas: null,
-    canvasState: [],
-    currentStateIndex: -1,
-    undoStatus: false,
-    redoStatus: false,
-    undoAvailable: true,
-    redoAvailable: true,
+    canvases: {},
+    canvasUndoHistories: {},
+    canvasRedoHistories: {},
+    undoHistory: [],
+    redoHistory: [],
+    nextState: null,
+    processing: false,
   },
 
   mutations: {
@@ -18,36 +19,40 @@ const store = createStore({
       state.canvas = canvas
     },
 
-    updateUndoAvailability(state, boolean) {
-      state.undoAvailable = boolean
+    initCanvas(state, { canvasId, canvas }) {
+      state.canvases = { ...state.canvases, ...{ [canvasId]: canvas } }
     },
 
-    updateRedoAvailability(state, boolean) {
-      state.redoAvailable = boolean
+    initUndoHistories(state, canvasId) {
+      state.canvasUndoHistories = { ...state.canvasUndoHistories, ...{ [canvasId]: [] } }
     },
 
-    pushToCanvasState(state, value) {
-      state.canvasState.push(value)
+    initRedoHistories(state, canvasId) {
+      state.canvasRedoHistories = { ...state.canvasRedoHistories, ...{ [canvasId]: [] } }
     },
 
-    updateRedoStatus(state, boolean) {
-      state.redoStatus = boolean
+    updateNextState(state, value) {
+      state.nextState = value
     },
 
-    updateUndoStatus(state, boolean) {
-      state.undoStatus = boolean
+    updateProcessing(state, boolean) {
+      state.processing = boolean
     },
 
-    updateCanvasState(state, value) {
-      state.canvasState = value
+    updateUndoHistory(state, value) {
+      state.undoHistory = value
     },
 
-    updateCanvasStateAtIndex(state, { index, value }) {
-      state.canvasState[index] = value
+    updateRedoHistory(state, value) {
+      state.redoHistory = value
     },
 
-    updateCurrentStateIndex(state, value) {
-      state.currentStateIndex = value
+    addUndoHistory(state, value) {
+      state.undoHistory.push(value)
+    },
+
+    addRedoHistory(state, value) {
+      state.redoHistory.push(value)
     },
   },
 
@@ -56,72 +61,53 @@ const store = createStore({
       commit('initializeCanvas', canvas)
     },
 
-    undoAction({ state, commit }) {
-      if (state.currentStateIndex === -1) {
-        commit('updateUndoStatus', false)
-      } else if (state.canvasState.length >= 1) {
-        if (state.currentStateIndex !== 0) {
-          commit('updateUndoStatus', true)
-          state.canvas.loadFromJSON(state.canvasState[state.currentStateIndex - 1], function () {
-            state.canvas.renderAll()
-            commit('updateUndoStatus', false)
-            commit('updateCurrentStateIndex', state.currentStateIndex - 1)
-            commit('updateUndoAvailability', true)
+    initializeCanvasState({ commit, getters }) {
+      commit('updateNextState', getters.getNextCanvasHistory())
+    },
 
-            if (state.currentStateIndex !== state.canvasState.length - 1) {
-              commit('updateRedoAvailability', true)
-            }
-          })
-        } else if (state.currentStateIndex === 0) {
-          state.canvas.clear()
-          commit('updateUndoAvailability', false)
-          commit('updateRedoAvailability', true)
-          commit('updateCurrentStateIndex', state.currentStateIndex - 1)
-        }
+    updateProcessing({ commit }, value) {
+      commit('updateProcessing', value)
+    },
+
+    undoAction({ state, commit, getters }) {
+      let undoHistoryState = [...state.undoHistory]
+      let history = undoHistoryState.pop()
+
+      if (history) {
+        commit('updateUndoHistory', undoHistoryState)
+        commit('addRedoHistory', getters.getNextCanvasHistory())
+        commit('updateNextState', history)
+        return history
       }
     },
 
-    redoAction({ state, commit }) {
-      if (state.currentStateIndex === state.canvasState.length - 1 && state.currentStateIndex !== -1) {
-        commit('updateRedoAvailability', false)
-      } else if (state.canvasState.length > state.currentStateIndex && state.canvasState.length !== 0) {
-        commit('updateRedoStatus', true)
-        state.canvas.loadFromJSON(state.canvasState[state.currentStateIndex + 1], function () {
-          state.canvas.renderAll()
-          commit('updateRedoStatus', false)
-          commit('updateCurrentStateIndex', state.currentStateIndex + 1)
+    redoAction({ state, commit, getters }) {
+      let redoHistoryState = [...state.redoHistory]
+      let history = redoHistoryState.pop()
 
-          if (state.currentStateIndex !== -1) {
-            commit('updateUndoAvailability', true)
-          }
-
-          if (state.currentStateIndex === state.canvasState.length - 1 && state.currentStateIndex !== -1) {
-            commit('updateRedoAvailability', false)
-          }
-        })
+      if (history) {
+        commit('updateRedoHistory', redoHistoryState)
+        commit('addUndoHistory', getters.getNextCanvasHistory())
+        commit('updateNextState', history)
+        return history
       }
     },
 
-    updateCanvasState({ state, commit }) {
-      if (!state.undoStatus && !state.redoStatus) {
-        let jsonData = state.canvas.toJSON()
-        let canvasAsJson = JSON.stringify(jsonData)
+    saveCanvasState({ state, commit, getters }) {
+      if (state.processing) return
 
-        if (state.currentStateIndex < state.canvasState.length - 1) {
-          let index = state.currentStateIndex + 1
-          commit('updateCanvasStateAtIndex', { index, value: canvasAsJson })
-          let numberOfElementsToRetain = index + 1
-          commit('updateCanvasState', state.canvasState.splice(0, numberOfElementsToRetain))
-        } else {
-          commit('pushToCanvasState', canvasAsJson)
-        }
+      commit('addUndoHistory', state.nextState)
+      commit('updateNextState', getters.getNextCanvasHistory())
+    }
+  },
 
-        commit('updateCurrentStateIndex', state.canvasState.length - 1)
+  getters: {
+    getNextCanvasHistory: (state) => () => {
+      let canvas = state.canvas
+      if (!canvas) return
 
-        if (state.currentStateIndex === state.canvasState.length - 1 && state.currentStateIndex !== -1) {
-          commit('updateRedoAvailability', false)
-        }
-      }
+      canvas.includeDefaultValues = false
+      return canvas.toJSON()
     }
   },
 })
